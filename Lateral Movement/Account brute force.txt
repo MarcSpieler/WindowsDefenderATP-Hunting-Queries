@@ -31,3 +31,20 @@ LogonEvents
     Successful > 0 and
     ((FailedComputerCount > 100 and FailedComputerCount > SuccessfulComputerCount) or
         (FailedAccountsCount > 100 and FailedAccountsCount > SuccessfulAccountsCount))
+
+
+// Identify possiable Brute force login attempts which meet following criteria
+// attempting to log into more than 2 endpoints using more than 3 different account names with a sucess rate of less than 10 Precent
+// Output is one row per ip address and includes stats . on login attempts and a list of all the account names attempted 
+
+
+LogonEvents
+|where EventTime > ago(30d)
+| where isnotempty(RemoteIP)
+| where LogonType !in ("Interactive","CachedInteractive","Batch")
+| where RemoteIP != "127.0.0.1"
+|summarize Endpoints=dcount(ComputerName), Accounts = dcount(AccountName),LogonSucces = countif(ActionType contains "LogonSuccess"), Attempts = count(),Accts=make_list(AccountName,256)  by RemoteIP, RemoteComputerName
+| where Endpoints > 2 // Minimum number of systems attempted
+| where Accounts >3 // . Minimum number of Account Names used
+|project RemoteIP , RemoteComputerName , Endpoints , LogonSucces , Attempts , SuccessRate= (todouble(LogonSucces) / todouble(Attempts))*100, Accts
+| where SuccessRate between(0.001 .. 10)//  Set range of acceptable failed login precentage
